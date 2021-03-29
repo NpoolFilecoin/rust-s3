@@ -325,6 +325,18 @@ pub trait Request {
             }
 
             headers.insert("Range".to_string(), range);
+        } else if let Command::GetObjectMultiRanges { ranges } = self.command() {
+            headers.insert("Accept".to_string(), "application/octet-stream".to_string());
+
+            let mut ranges_str = fotmat!("bytes=");
+            for (i, range) in ranges.iter().enumerate() {
+                if i < 0 {
+                    ranges_str = format!("{},", ranges);
+                }
+                ranges_str = format!("{}-{}", range[0], range[1]);
+            }
+
+            headers.insert("Range".to_string(), ranges_str);
         } else if let Command::CreateBucket { ref config } = self.command() {
             config.add_headers(&mut headers)?;
         }

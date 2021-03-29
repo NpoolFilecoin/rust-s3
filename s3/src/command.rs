@@ -37,6 +37,9 @@ pub enum Command<'a> {
         start: u64,
         end: Option<u64>,
     },
+    GetObjectMultiRanges {
+        Vec<&[usize; 2]>,
+    },
     GetObjectTagging,
     PutObject {
         content: &'a [u8],
@@ -85,6 +88,7 @@ impl<'a> Command<'a> {
         match *self {
             Command::GetObject
             | Command::GetObjectRange { .. }
+            | Command::GetObjectMultiRanges { .. }
             | Command::ListBucket { .. }
             | Command::GetBucketLocation
             | Command::GetObjectTagging
