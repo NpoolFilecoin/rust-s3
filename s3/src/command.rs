@@ -12,6 +12,12 @@ pub enum HttpMethod {
     Head,
 }
 
+#[derive(Clone, Debug)]
+pub struct HttpRange {
+    pub start: u64,
+    pub end: u64,
+}
+
 use std::fmt;
 
 impl fmt::Display for HttpMethod {
@@ -38,7 +44,7 @@ pub enum Command<'a> {
         end: Option<u64>,
     },
     GetObjectMultiRanges {
-        Vec<&[usize; 2]>,
+        ranges: Vec<HttpRange>,
     },
     GetObjectTagging,
     PutObject {

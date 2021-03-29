@@ -11,7 +11,9 @@ use reqwest::{Client, Response};
 use crate::bucket::Bucket;
 use crate::command::Command;
 use crate::command::HttpMethod;
+use crate::command::HttpRange;
 use crate::request_trait::Request;
+use crate::request_trait::MultiRangeResp;
 use crate::{Result, S3Error};
 
 use tokio::stream::StreamExt;
@@ -160,6 +162,35 @@ impl<'a> Request for Reqwest<'a> {
             }
         }
         Ok((body_vec, status_code))
+    }
+
+    async fn response_data_by_multi_ranges(
+        &self,
+        etag: bool,
+    ) -> Result<(Vec<MultiRangeResp>, u16)> {
+        let response = self.response().await?;
+        let status_code = response.status().as_u16();
+        let headers = response.headers().clone();
+        let etag_header = headers.get("ETag");
+        let body = response.bytes().await?;
+        let mut body_vec = Vec::new();
+        body_vec.extend_from_slice(&body[..]);
+        if etag {
+            if let Some(etag) = etag_header {
+                body_vec = etag.to_str()?.as_bytes().to_vec();
+            }
+        }
+
+        let mut resps = Vec::new();
+        resps.push(MultiRangeResp {
+            data: body_vec,
+            range: HttpRange {
+                start: 0,
+                end: 0,
+            },
+        });
+
+        Ok((resps, status_code))
     }
 
     async fn response_data_to_writer<'b, T: Write>(&self, writer: &'b mut T) -> Result<u16> {

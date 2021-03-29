@@ -8,9 +8,15 @@ use url::Url;
 use crate::bucket::Bucket;
 use crate::bucket::Headers;
 use crate::command::Command;
+use crate::command::HttpRange;
 use crate::signing;
 use crate::Result;
 use crate::LONG_DATE;
+
+pub struct MultiRangeResp {
+    pub data: Vec<u8>,
+    pub range: HttpRange,
+}
 
 #[maybe_async(?Send)]
 pub trait Request {
@@ -19,6 +25,7 @@ pub trait Request {
 
     async fn response(&self) -> Result<Self::Response>;
     async fn response_data(&self, etag: bool) -> Result<(Vec<u8>, u16)>;
+    async fn response_data_by_multi_ranges(&self, etag: bool) -> Result<(Vec<MultiRangeResp>, u16)>;
     async fn response_data_to_writer<'b, T: Write>(&self, writer: &'b mut T) -> Result<u16>;
     async fn response_header(&self) -> Result<(Self::HeaderMap, u16)>;
     fn datetime(&self) -> DateTime<Utc>;
@@ -328,12 +335,12 @@ pub trait Request {
         } else if let Command::GetObjectMultiRanges { ranges } = self.command() {
             headers.insert("Accept".to_string(), "application/octet-stream".to_string());
 
-            let mut ranges_str = fotmat!("bytes=");
+            let mut ranges_str = format!("bytes=");
             for (i, range) in ranges.iter().enumerate() {
                 if i < 0 {
-                    ranges_str = format!("{},", ranges);
+                    ranges_str = format!("{},", ranges_str);
                 }
-                ranges_str = format!("{}-{}", range[0], range[1]);
+                ranges_str = format!("{}{}-{}", ranges_str, range.start, range.end);
             }
 
             headers.insert("Range".to_string(), ranges_str);

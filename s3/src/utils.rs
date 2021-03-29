@@ -186,6 +186,7 @@ impl From<&http::HeaderMap> for HeadObjectResult {
         result.last_modified = headers.get_string("Last-Modified");
         let mut values = ::std::collections::HashMap::new();
         for (key, value) in headers.iter() {
+            println!("header {} - {:?}", key, value);
             if key.as_str().starts_with("x-amz-meta-") {
                 if let Ok(value) = value.to_str() {
                     values.insert(

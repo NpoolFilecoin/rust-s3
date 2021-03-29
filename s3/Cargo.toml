@@ -14,9 +14,9 @@ edition = "2018"
 name = "s3"
 path = "src/lib.rs"
 
-# [[bin]]
-# name = "simple_crud"
-# path = "bin/simple_crud.rs"
+[[bin]]
+name = "simple_crud"
+path = "bin/simple_crud.rs"
 
 [dependencies]
 async-std = { version = "1", optional = true }
