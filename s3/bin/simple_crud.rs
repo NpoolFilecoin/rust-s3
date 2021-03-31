@@ -1,6 +1,7 @@
 extern crate s3;
 
 use std::str;
+use std::ops::Range;
 
 use s3::bucket::Bucket;
 use s3::creds::Credentials;
@@ -113,6 +114,18 @@ pub fn main() -> Result<(), S3Error> {
         // println!("{}", string);
         assert_eq!(206, code);
         assert_eq!(&MESSAGE[3..7], string);
+
+        let mut ranges = Vec::new();
+        ranges.push(Range { start: 2, end: 4 });
+        ranges.push(Range { start: 5, end: 7 });
+        let (datas, code) = rt.block_on(bucket.get_object_multi_ranges("test_file", ranges)).unwrap();
+        assert_eq!(206, code);
+
+        for resp in datas {
+            let string = str::from_utf8(&resp.data)?;
+            println!("{:?} / {}", resp.range, string);
+            // assert_eq!(&MESSAGE[3..7], string);
+        }
 
         if backend.location_supported {
             // Get bucket location

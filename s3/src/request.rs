@@ -2,6 +2,7 @@ extern crate base64;
 extern crate md5;
 
 use std::io::Write;
+use std::ops::Range;
 
 use chrono::{DateTime, Utc};
 use maybe_async::maybe_async;
@@ -11,7 +12,6 @@ use reqwest::{Client, Response};
 use crate::bucket::Bucket;
 use crate::command::Command;
 use crate::command::HttpMethod;
-use crate::command::HttpRange;
 use crate::request_trait::Request;
 use crate::request_trait::MultiRangeResp;
 use crate::{Result, S3Error};
@@ -184,7 +184,7 @@ impl<'a> Request for Reqwest<'a> {
         let mut resps = Vec::new();
         resps.push(MultiRangeResp {
             data: body_vec,
-            range: HttpRange {
+            range: Range {
                 start: 0,
                 end: 0,
             },

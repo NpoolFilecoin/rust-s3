@@ -3,6 +3,7 @@ use crate::serde_types::CompleteMultipartUploadData;
 
 use crate::EMPTY_PAYLOAD_SHA;
 use sha2::{Digest, Sha256};
+use std::ops::Range;
 
 pub enum HttpMethod {
     Delete,
@@ -10,12 +11,6 @@ pub enum HttpMethod {
     Put,
     Post,
     Head,
-}
-
-#[derive(Clone, Debug)]
-pub struct HttpRange {
-    pub start: u64,
-    pub end: u64,
 }
 
 use std::fmt;
@@ -44,7 +39,7 @@ pub enum Command<'a> {
         end: Option<u64>,
     },
     GetObjectMultiRanges {
-        ranges: Vec<HttpRange>,
+        ranges: Vec<Range<usize>>,
     },
     GetObjectTagging,
     PutObject {

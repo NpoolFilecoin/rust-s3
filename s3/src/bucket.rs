@@ -3,10 +3,10 @@ use block_on_proc::block_on;
 use serde_xml_rs as serde_xml;
 use std::collections::HashMap;
 use std::mem;
+use std::ops::Range;
 
 use crate::bucket_ops::{BucketConfiguration, CreateBucketResponse};
 use crate::command::Command;
-use crate::command::HttpRange;
 use crate::creds::Credentials;
 use crate::region::Region;
 
@@ -481,7 +481,7 @@ impl Bucket {
     pub async fn get_object_multi_ranges<S: AsRef<str>>(
         &self,
         path: S,
-        ranges: Vec<HttpRange>,
+        ranges: Vec<Range<usize>>,
     ) -> Result<(Vec<MultiRangeResp>, u16)> {
         let command = Command::GetObjectMultiRanges { ranges };
         let request = RequestImpl::new(self, path.as_ref(), command);

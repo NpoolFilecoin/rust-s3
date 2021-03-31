@@ -4,18 +4,18 @@ use hmac::NewMac;
 use maybe_async::maybe_async;
 use std::io::Write;
 use url::Url;
+use std::ops::Range;
 
 use crate::bucket::Bucket;
 use crate::bucket::Headers;
 use crate::command::Command;
-use crate::command::HttpRange;
 use crate::signing;
 use crate::Result;
 use crate::LONG_DATE;
 
 pub struct MultiRangeResp {
     pub data: Vec<u8>,
-    pub range: HttpRange,
+    pub range: Range<usize>,
 }
 
 #[maybe_async(?Send)]
