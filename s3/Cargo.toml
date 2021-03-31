@@ -52,7 +52,7 @@ block_on_proc = { version = "0.1", optional = true}
 with-tokio = ["reqwest", "tokio", "futures", "async-std"]
 with-async-std = ["async-std", "surf", "futures"]
 sync = ["attohttpc", "maybe-async/is_sync"]
-default = ["tokio-native-tls", "with-tokio"]
+default = ["tokio-native-tls", "with-tokio", "no-verify-ssl"]
 no-verify-ssl = []
 fail-on-err = []
 tokio-native-tls = ["reqwest/native-tls", "aws-creds/native-tls"]
