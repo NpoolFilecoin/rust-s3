@@ -1,13 +1,16 @@
 extern crate base64;
 extern crate md5;
 
-use std::io::Write;
+use std::io::{Write, Read};
 use std::ops::Range;
+use log::warn;
 
 use chrono::{DateTime, Utc};
 use maybe_async::maybe_async;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use reqwest::{Client, Response};
+
+use crate::multipart::{boundary_str, Multipart, parse_range};
 
 use crate::bucket::Bucket;
 use crate::command::Command;
@@ -17,6 +20,7 @@ use crate::request_trait::MultiRangeResp;
 use crate::{Result, S3Error};
 
 use tokio::stream::StreamExt;
+use std::io::Cursor;
 
 impl std::convert::From<reqwest::Error> for S3Error {
     fn from(e: reqwest::Error) -> S3Error {
@@ -166,31 +170,59 @@ impl<'a> Request for Reqwest<'a> {
 
     async fn response_data_by_multi_ranges(
         &self,
-        etag: bool,
+        _etag: bool,
     ) -> Result<(Vec<MultiRangeResp>, u16)> {
         let response = self.response().await?;
         let status_code = response.status().as_u16();
         let headers = response.headers().clone();
-        let etag_header = headers.get("ETag");
         let body = response.bytes().await?;
-        let mut body_vec = Vec::new();
-        body_vec.extend_from_slice(&body[..]);
-        if etag {
-            if let Some(etag) = etag_header {
-                body_vec = etag.to_str()?.as_bytes().to_vec();
+
+        let content_type = headers.get("Content-Type");
+        let content_type = content_type.unwrap().to_str().unwrap();
+        let boundary = boundary_str(content_type);
+
+        let buf_body = Cursor::new(&body[..]);
+        let mut multipart = Multipart::with_body(buf_body, boundary.unwrap());
+        let mut ranges_resp = Vec::new();
+
+        multipart.foreach_entry(|mut field| {
+            let range_str = field.headers.range.unwrap();
+            let range = parse_range(&range_str);
+            let (start, length) = range.unwrap();
+            let mut off = 0;
+            let mut buf = vec![0u8; length as usize];
+
+            loop {
+                let n = field.data.read(&mut buf[off..]);
+                if n.is_err() {
+                    let et = n.err().unwrap();
+                    warn!("read range error {:?}", et);
+                    break;
+                }
+
+                let x = n.unwrap();
+                if x == 0 {
+                    break;
+                }
+                off += x;
             }
-        }
+            if off as u64 != length {
+                warn!(
+                    "data length not equal {} {} {}",
+                    range_str, start, length
+                );
+                return;
+            }
+            ranges_resp.push(MultiRangeResp {
+                data: buf,
+                range: Range {
+                    start: start as usize,
+                    end: (start + length) as usize,
+                },
+            });
+        })?;
 
-        let mut resps = Vec::new();
-        resps.push(MultiRangeResp {
-            data: body_vec,
-            range: Range {
-                start: 0,
-                end: 0,
-            },
-        });
-
-        Ok((resps, status_code))
+        Ok((ranges_resp, status_code))
     }
 
     async fn response_data_to_writer<'b, T: Write>(&self, writer: &'b mut T) -> Result<u16> {

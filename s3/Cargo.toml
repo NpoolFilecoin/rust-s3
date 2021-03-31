@@ -45,6 +45,14 @@ surf = { version = "2", optional = true, default-features = false, features = ["
 # Waiting on h2 compat
 tokio = { version = "0.2", features = ["stream"], optional = true, default-features = false }
 url = "2"
+buf_redux = { version = "0.8", default-features = false }
+safemem = { version = "0.3" }
+httparse = { version = "1.2" }
+twoway = { version = "0.1" }
+quick-error = { version = "1.2" }
+mime = "0.3.14"
+mime_guess = "2.0.1"
+bytes = "1.0.1"
 
 block_on_proc = { version = "0.1", optional = true}
 

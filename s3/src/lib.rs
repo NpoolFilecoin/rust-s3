@@ -4,6 +4,9 @@
 #[macro_use]
 extern crate serde_derive;
 
+#[macro_use]
+extern crate quick_error;
+
 use serde_xml_rs as serde_xml;
 
 pub use awscreds as creds;
@@ -28,6 +31,8 @@ pub mod surf_request;
 
 pub mod request_trait;
 pub mod utils;
+
+mod multipart;
 
 simpl::err!(S3Error, {
     Xml@serde_xml::Error;
