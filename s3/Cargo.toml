@@ -18,6 +18,10 @@ path = "src/lib.rs"
 name = "simple_crud"
 path = "bin/simple_crud.rs"
 
+[[bin]]
+name = "simple_read"
+path = "bin/simple_read.rs"
+
 [dependencies]
 async-std = { version = "1", optional = true }
 async-trait = "0.1"
