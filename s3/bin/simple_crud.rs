@@ -108,6 +108,12 @@ pub fn main() -> Result<(), S3Error> {
         assert_eq!(200, code);
         assert_eq!(MESSAGE, string);
 
+        let (data, code) = rt.block_on(bucket.get_object_range("test_file", 3, Some(6))).unwrap();
+        let string = str::from_utf8(&data)?;
+        // println!("{}", string);
+        assert_eq!(206, code);
+        assert_eq!(&MESSAGE[3..7], string);
+
         if backend.location_supported {
             // Get bucket location
             println!("{:?}", rt.block_on(bucket.location()).unwrap());
