@@ -6,6 +6,7 @@ use std::mem;
 
 use crate::bucket_ops::{BucketConfiguration, CreateBucketResponse};
 use crate::command::Command;
+use crate::command::HttpRange;
 use crate::creds::Credentials;
 use crate::region::Region;
 
@@ -33,6 +34,7 @@ use std::io::Read;
 use std::path::Path;
 
 use crate::request_trait::Request;
+use crate::request_trait::MultiRangeResp;
 use crate::serde_types::{
     BucketLocationResult, CompleteMultipartUploadData, HeadObjectResult,
     InitiateMultipartUploadResponse, ListBucketResult, Part, Tagging,
@@ -473,6 +475,17 @@ impl Bucket {
         let command = Command::GetObjectRange { start, end };
         let request = RequestImpl::new(self, path.as_ref(), command);
         Ok(request.response_data(false).await?)
+    }
+
+    #[maybe_async::maybe_async]
+    pub async fn get_object_multi_ranges<S: AsRef<str>>(
+        &self,
+        path: S,
+        ranges: Vec<HttpRange>,
+    ) -> Result<(Vec<MultiRangeResp>, u16)> {
+        let command = Command::GetObjectMultiRanges { ranges };
+        let request = RequestImpl::new(self, path.as_ref(), command);
+        Ok(request.response_data_by_multi_ranges(false).await?)
     }
 
     /// Stream file from S3 path to a local file, generic over T: Write.

@@ -10,6 +10,7 @@ pub use awscreds as creds;
 pub use awsregion as region;
 
 pub use bucket::Bucket;
+pub use command::HttpRange;
 pub use bucket_ops::BucketConfiguration;
 pub use region::Region;
 

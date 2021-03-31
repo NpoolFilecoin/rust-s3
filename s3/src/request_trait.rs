@@ -337,7 +337,7 @@ pub trait Request {
 
             let mut ranges_str = format!("bytes=");
             for (i, range) in ranges.iter().enumerate() {
-                if i < 0 {
+                if 0 < i {
                     ranges_str = format!("{},", ranges_str);
                 }
                 ranges_str = format!("{}{}-{}", ranges_str, range.start, range.end);
