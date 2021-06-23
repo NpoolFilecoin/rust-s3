@@ -4,6 +4,7 @@ use serde_xml_rs as serde_xml;
 use std::collections::HashMap;
 use std::mem;
 use std::ops::Range;
+use std::time;
 
 use crate::bucket_ops::{BucketConfiguration, CreateBucketResponse};
 use crate::command::Command;
@@ -61,6 +62,8 @@ pub const CHUNK_SIZE: usize = 8_388_608; // 8 Mebibytes, min is 5 (5_242_880);
 pub struct Bucket {
     pub name: String,
     pub region: Region,
+    // TODO http 属性
+    pub timeout: time::Duration,
     pub credentials: Credentials,
     pub extra_headers: Headers,
     pub extra_query: Query,
@@ -97,9 +100,10 @@ impl Bucket {
     /// let bucket_name = "rust-s3-test";
     /// let region = "us-east-1".parse().unwrap();
     /// let credentials = Credentials::default().unwrap();
+    /// let timeout = time::Duration::from_secs(10);
     /// let bucket = Bucket::new(bucket_name, region, credentials).unwrap();
     ///
-    /// let url = bucket.presign_get("/test.file", 86400).unwrap();
+    /// let url = bucket.presign_get("/test.file", 86400, timeout).unwrap();
     /// println!("Presigned url: {}", url);
     /// ```
     pub fn presign_get<S: AsRef<str>>(&self, path: S, expiry_secs: u32) -> Result<String> {
@@ -185,13 +189,14 @@ impl Bucket {
     pub async fn create(
         name: &str,
         region: Region,
+        timeout: time::Duration,
         credentials: Credentials,
         config: BucketConfiguration,
     ) -> Result<CreateBucketResponse> {
         let mut config = config;
         config.set_region(region.clone());
         let command = Command::CreateBucket { config };
-        let bucket = Bucket::new(name, region, credentials)?;
+        let bucket = Bucket::new(name, region, timeout, credentials)?;
         let request = RequestImpl::new(&bucket, "", command);
         let (data, response_code) = request.response_data(false).await?;
         let response_text = std::str::from_utf8(&data)?;
@@ -238,12 +243,13 @@ impl Bucket {
     pub async fn create_with_path_style(
         name: &str,
         region: Region,
+        timeout: time::Duration,
         credentials: Credentials,
         mut config: BucketConfiguration,
     ) -> Result<CreateBucketResponse> {
         config.set_region(region.clone());
         let command = Command::CreateBucket { config };
-        let bucket = Bucket::new_with_path_style(name, region, credentials)?;
+        let bucket = Bucket::new_with_path_style(name, region, timeout, credentials)?;
         let request = RequestImpl::new(&bucket, "", command);
         let (data, response_code) = request.response_data(false).await?;
         let response_text = std::str::from_utf8(&data)?;
@@ -306,10 +312,11 @@ impl Bucket {
     ///
     /// let bucket = Bucket::new(bucket_name, region, credentials).unwrap();
     /// ```
-    pub fn new(name: &str, region: Region, credentials: Credentials) -> Result<Bucket> {
+    pub fn new(name: &str, region: Region, timeout: time::Duration, credentials: Credentials) -> Result<Bucket> {
         Ok(Bucket {
             name: name.into(),
             region,
+            timeout,
             credentials,
             extra_headers: HashMap::new(),
             extra_query: HashMap::new(),
@@ -329,10 +336,11 @@ impl Bucket {
     ///
     /// let bucket = Bucket::new_public(bucket_name, region).unwrap();
     /// ```
-    pub fn new_public(name: &str, region: Region) -> Result<Bucket> {
+    pub fn new_public(name: &str, region: Region, timeout: time::Duration) -> Result<Bucket> {
         Ok(Bucket {
             name: name.into(),
             region,
+            timeout,
             credentials: Credentials::anonymous()?,
             extra_headers: HashMap::new(),
             extra_query: HashMap::new(),
@@ -356,11 +364,13 @@ impl Bucket {
     pub fn new_with_path_style(
         name: &str,
         region: Region,
+        timeout: time::Duration,
         credentials: Credentials,
     ) -> Result<Bucket> {
         Ok(Bucket {
             name: name.into(),
             region,
+            timeout,
             credentials,
             extra_headers: HashMap::new(),
             extra_query: HashMap::new(),
@@ -380,10 +390,11 @@ impl Bucket {
     ///
     /// let bucket = Bucket::new_public_with_path_style(bucket_name, region).unwrap();
     /// ```
-    pub fn new_public_with_path_style(name: &str, region: Region) -> Result<Bucket> {
+    pub fn new_public_with_path_style(name: &str, region: Region, timeout: time::Duration) -> Result<Bucket> {
         Ok(Bucket {
             name: name.into(),
             region,
+            timeout,
             credentials: Credentials::anonymous()?,
             extra_headers: HashMap::new(),
             extra_query: HashMap::new(),

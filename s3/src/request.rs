@@ -90,7 +90,7 @@ impl<'a> Request for Reqwest<'a> {
         };
 
         let client = if cfg!(feature = "no-verify-ssl") {
-            let client = Client::builder();
+            let client = Client::builder().timeout(self.bucket.timeout);
 
             cfg_if::cfg_if! {
                 if #[cfg(feature = "tokio-native-tls")]
@@ -110,7 +110,7 @@ impl<'a> Request for Reqwest<'a> {
 
             client.build().expect("Could not build dangerous client!")
         } else {
-            Client::new()
+            Client::builder().timeout(self.bucket.timeout).build().unwrap()
         };
 
         let method = match self.command.http_verb() {
