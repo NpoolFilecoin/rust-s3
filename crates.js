@@ -1,0 +1,1 @@
+window.ALL_CRATES = ["awscreds","awsregion","s3","simple_crud","simple_read"];
