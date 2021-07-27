@@ -181,6 +181,17 @@ impl<'a> Request for Reqwest<'a> {
         let content_type = content_type.unwrap().to_str().unwrap();
         let boundary = boundary_str(content_type);
 
+        if boundary.is_none() {
+            return Err(S3Error::from(
+                format!(
+                    "Request failed with code {}\n{:?}",
+                    status_code,
+                    headers,
+                )
+                .as_str(),
+            ));
+        }
+
         let buf_body = Cursor::new(&body[..]);
         let mut multipart = Multipart::with_body(buf_body, boundary.unwrap());
         let mut ranges_resp = Vec::new();
