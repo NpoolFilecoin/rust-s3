@@ -204,15 +204,15 @@ fn issue_104() {
 fn issue_114() {
     // ::init_log();
 
-    fn consume_all<R: BufRead>(mut rdr: R) {
-        loop {
-            let consume = rdr.fill_buf().unwrap().len();
-            if consume == 0 {
-                return;
-            }
-            rdr.consume(consume);
-        }
-    }
+    // fn consume_all<R: BufRead>(mut rdr: R) {
+    //     loop {
+    //         let consume = rdr.fill_buf().unwrap().len();
+    //         if consume == 0 {
+    //             return;
+    //         }
+    //         rdr.consume(consume);
+    //     }
+    // }
 
     use std::io::Cursor;
 

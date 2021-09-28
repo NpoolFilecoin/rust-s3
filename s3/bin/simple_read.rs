@@ -1,6 +1,6 @@
 extern crate s3;
 
-use std::str;
+use std::{str, time};
 use std::ops::Range;
 
 use s3::bucket::Bucket;
@@ -74,7 +74,7 @@ pub fn main() -> Result<(), S3Error> {
     for backend in vec![aws] {
         println!("Running {}", backend.name);
         // Create Bucket in REGION for BUCKET
-        let bucket = Bucket::new_with_path_style(&backend.bucket, backend.region, backend.credentials)?;
+        let bucket = Bucket::new_with_path_style(&backend.bucket, backend.region,time::Duration::from_secs(5), backend.credentials)?;
 
         // [3052000608..3052000640, 3052000512..3052000544, 3052000544..3052000576, 3052000576..3052000608, 3052000640..3052000672, 3052000672..3052000704, 3052000704..3052000736, 3052000736..3052000768]
         let mut ranges = Vec::new();

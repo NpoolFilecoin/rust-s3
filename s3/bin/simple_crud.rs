@@ -1,6 +1,7 @@
 extern crate s3;
 
 use std::str;
+use std::time;
 use std::ops::Range;
 
 use s3::bucket::Bucket;
@@ -101,7 +102,7 @@ pub fn main() -> Result<(), S3Error> {
     for backend in vec![aws] {
         println!("Running {}", backend.name);
         // Create Bucket in REGION for BUCKET
-        let bucket = Bucket::new_with_path_style(&backend.bucket, backend.region, backend.credentials)?;
+        let bucket = Bucket::new_with_path_style(&backend.bucket, backend.region, time::Duration::from_secs(5),backend.credentials)?;
 
         // List out contents of directory
         let results = rt.block_on(bucket.list("".to_string(), None)).unwrap();

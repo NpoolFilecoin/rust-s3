@@ -1444,6 +1444,7 @@ mod test {
         Bucket::new(
             "rust-s3-test",
             "eu-central-1".parse().unwrap(),
+            std::time::Duration::from_secs(5),
             test_aws_credentials(),
         )
         .unwrap()
@@ -1453,6 +1454,7 @@ mod test {
         Bucket::new(
             "rust-s3",
             "wa-eu-central-1".parse().unwrap(),
+            std::time::Duration::from_secs(5),
             test_wasabi_credentials(),
         )
         .unwrap()
@@ -1465,6 +1467,7 @@ mod test {
                 region: "us-east1".to_owned(),
                 endpoint: "https://storage.googleapis.com".to_owned(),
             },
+            std::time::Duration::from_secs(5),
             test_gc_credentials(),
         )
         .unwrap()
@@ -1720,6 +1723,7 @@ mod test {
         let response = Bucket::create(
             &uuid::Uuid::new_v4().to_string(),
             "us-east-1".parse().unwrap(),
+            std::time::Duration::from_secs(5),
             test_aws_credentials(),
             config,
         )
@@ -1748,6 +1752,7 @@ mod test {
         let response = Bucket::create(
             &uuid::Uuid::new_v4().to_string(),
             "eu-central-1".parse().unwrap(),
+            std::time::Duration::from_secs(5),
             test_aws_credentials(),
             config,
         )
@@ -1776,6 +1781,7 @@ mod test {
         let response = Bucket::create(
             &uuid::Uuid::new_v4().to_string(),
             "eu-central-1".parse().unwrap(),
+            std::time::Duration::from_secs(5),
             test_aws_credentials(),
             config,
         )

@@ -4,7 +4,7 @@ extern crate md5;
 use std::io::{Write, Read};
 use std::ops::Range;
 use log::warn;
-
+use std::time;
 use chrono::{DateTime, Utc};
 use maybe_async::maybe_async;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
@@ -289,7 +289,7 @@ mod tests {
     #[test]
     fn url_uses_https_by_default() -> Result<()> {
         let region = "custom-region".parse()?;
-        let bucket = Bucket::new("my-first-bucket", region, fake_credentials())?;
+        let bucket = Bucket::new("my-first-bucket", region, std::time::Duration::from_secs(5),fake_credentials())?;
         let path = "/my-first/path";
         let request = Reqwest::new(&bucket, path, Command::GetObject);
 
@@ -305,7 +305,7 @@ mod tests {
     #[test]
     fn url_uses_https_by_default_path_style() -> Result<()> {
         let region = "custom-region".parse()?;
-        let bucket = Bucket::new_with_path_style("my-first-bucket", region, fake_credentials())?;
+        let bucket = Bucket::new_with_path_style("my-first-bucket", region, std::time::Duration::from_secs(5),fake_credentials())?;
         let path = "/my-first/path";
         let request = Reqwest::new(&bucket, path, Command::GetObject);
 
@@ -321,7 +321,7 @@ mod tests {
     #[test]
     fn url_uses_scheme_from_custom_region_if_defined() -> Result<()> {
         let region = "http://custom-region".parse()?;
-        let bucket = Bucket::new("my-second-bucket", region, fake_credentials())?;
+        let bucket = Bucket::new("my-second-bucket", region, std::time::Duration::from_secs(5),fake_credentials())?;
         let path = "/my-second/path";
         let request = Reqwest::new(&bucket, path, Command::GetObject);
 
@@ -336,7 +336,7 @@ mod tests {
     #[test]
     fn url_uses_scheme_from_custom_region_if_defined_with_path_style() -> Result<()> {
         let region = "http://custom-region".parse()?;
-        let bucket = Bucket::new_with_path_style("my-second-bucket", region, fake_credentials())?;
+        let bucket = Bucket::new_with_path_style("my-second-bucket", region, std::time::Duration::from_secs(5),fake_credentials())?;
         let path = "/my-second/path";
         let request = Reqwest::new(&bucket, path, Command::GetObject);
 
@@ -352,7 +352,7 @@ mod tests {
     #[test]
     fn test_get_object_range_header() -> Result<()> {
         let region = "http://custom-region".parse()?;
-        let bucket = Bucket::new_with_path_style("my-second-bucket", region, fake_credentials())?;
+        let bucket = Bucket::new_with_path_style("my-second-bucket", region, std::time::Duration::from_secs(5),fake_credentials())?;
         let path = "/my-second/path";
 
         let request = Reqwest::new(
