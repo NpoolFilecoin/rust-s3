@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::{self, FromStr};
 
@@ -24,7 +25,7 @@ use std::str::{self, FromStr};
 /// let region = Region::Custom { region: region_name, endpoint };
 ///
 /// ```
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Region {
     /// us-east-1
     UsEast1,
@@ -36,6 +37,10 @@ pub enum Region {
     UsWest2,
     /// ca-central-1
     CaCentral1,
+    /// af-south-1
+    AfSouth1,
+    /// ap-east-1
+    ApEast1,
     /// ap-south-1
     ApSouth1,
     /// ap-northeast-1
@@ -72,6 +77,8 @@ pub enum Region {
     DoAms3,
     /// Digital Ocean sgp1
     DoSgp1,
+    /// Digiral Ocean fra1
+    DoFra1,
     /// Yandex Object Storage
     Yandex,
     /// Wasabi us-east-1
@@ -94,7 +101,9 @@ impl fmt::Display for Region {
             UsEast2 => write!(f, "us-east-2"),
             UsWest1 => write!(f, "us-west-1"),
             UsWest2 => write!(f, "us-west-2"),
+            AfSouth1 => write!(f, "af-south-1"),
             CaCentral1 => write!(f, "ca-central-1"),
+            ApEast1 => write!(f, "ap-east-1"),
             ApSouth1 => write!(f, "ap-south-1"),
             ApNortheast1 => write!(f, "ap-northeast-1"),
             ApNortheast2 => write!(f, "ap-northeast-2"),
@@ -113,20 +122,21 @@ impl fmt::Display for Region {
             DoNyc3 => write!(f, "nyc3"),
             DoAms3 => write!(f, "ams3"),
             DoSgp1 => write!(f, "sgp1"),
+            DoFra1 => write!(f, "fra1"),
             Yandex => write!(f, "ru-central1"),
             WaUsEast1 => write!(f, "us-east-1"),
             WaUsEast2 => write!(f, "us-east-2"),
             WaUsWest1 => write!(f, "us-west-1"),
             WaEuCentral1 => write!(f, "eu-central-1"),
-            Custom { ref region, .. } => write!(f, "{}", region.to_string()),
+            Custom { ref region, .. } => write!(f, "{}", region),
         }
     }
 }
 
 impl FromStr for Region {
-    type Err = crate::AwsRegionError;
+    type Err = std::str::Utf8Error;
 
-    fn from_str(s: &str) -> crate::Result<Self> {
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         use self::Region::*;
         match s {
             "us-east-1" => Ok(UsEast1),
@@ -134,6 +144,8 @@ impl FromStr for Region {
             "us-west-1" => Ok(UsWest1),
             "us-west-2" => Ok(UsWest2),
             "ca-central-1" => Ok(CaCentral1),
+            "af-south-1" => Ok(AfSouth1),
+            "ap-east-1" => Ok(ApEast1),
             "ap-south-1" => Ok(ApSouth1),
             "ap-northeast-1" => Ok(ApNortheast1),
             "ap-northeast-2" => Ok(ApNortheast2),
@@ -152,6 +164,7 @@ impl FromStr for Region {
             "nyc3" => Ok(DoNyc3),
             "ams3" => Ok(DoAms3),
             "sgp1" => Ok(DoSgp1),
+            "fra1" => Ok(DoFra1),
             "yandex" => Ok(Yandex),
             "ru-central1" => Ok(Yandex),
             "wa-us-east-1" => Ok(WaUsEast1),
@@ -177,6 +190,8 @@ impl Region {
             UsWest1 => String::from("s3-us-west-1.amazonaws.com"),
             UsWest2 => String::from("s3-us-west-2.amazonaws.com"),
             CaCentral1 => String::from("s3-ca-central-1.amazonaws.com"),
+            AfSouth1 => String::from("s3-af-south-1.amazonaws.com"),
+            ApEast1 => String::from("s3-ap-east-1.amazonaws.com"),
             ApSouth1 => String::from("s3-ap-south-1.amazonaws.com"),
             ApNortheast1 => String::from("s3-ap-northeast-1.amazonaws.com"),
             ApNortheast2 => String::from("s3-ap-northeast-2.amazonaws.com"),
@@ -186,7 +201,7 @@ impl Region {
             CnNorth1 => String::from("s3.cn-north-1.amazonaws.com.cn"),
             CnNorthwest1 => String::from("s3.cn-northwest-1.amazonaws.com.cn"),
             EuNorth1 => String::from("s3-eu-north-1.amazonaws.com"),
-            EuCentral1 => String::from("s3-eu-central-1.amazonaws.com"),
+            EuCentral1 => String::from("s3.eu-central-1.amazonaws.com"),
             EuWest1 => String::from("s3-eu-west-1.amazonaws.com"),
             EuWest2 => String::from("s3-eu-west-2.amazonaws.com"),
             EuWest3 => String::from("s3-eu-west-3.amazonaws.com"),
@@ -195,6 +210,7 @@ impl Region {
             DoNyc3 => String::from("nyc3.digitaloceanspaces.com"),
             DoAms3 => String::from("ams3.digitaloceanspaces.com"),
             DoSgp1 => String::from("sgp1.digitaloceanspaces.com"),
+            DoFra1 => String::from("fra1.digitaloceanspaces.com"),
             Yandex => String::from("storage.yandexcloud.net"),
             WaUsEast1 => String::from("s3.us-east-1.wasabisys.com"),
             WaUsEast2 => String::from("s3.us-east-2.wasabisys.com"),

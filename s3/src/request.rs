@@ -1,67 +1,35 @@
 extern crate base64;
 extern crate md5;
 
-use std::io::{Write, Read};
-use std::ops::Range;
 use log::warn;
-use std::time;
-use chrono::{DateTime, Utc};
 use maybe_async::maybe_async;
-use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use reqwest::{Client, Response};
+use std::io::{Read, Write};
+use std::ops::Range;
+use time::OffsetDateTime;
 
-use crate::multipart::{boundary_str, Multipart, parse_range};
+use crate::multipart::{boundary_str, parse_range, Multipart};
 
 use crate::bucket::Bucket;
 use crate::command::Command;
 use crate::command::HttpMethod;
-use crate::request_trait::Request;
+use crate::error::S3Error;
 use crate::request_trait::MultiRangeResp;
-use crate::{Result, S3Error};
-
-use tokio::stream::StreamExt;
+use crate::request_trait::Request;
 use std::io::Cursor;
 
-impl std::convert::From<reqwest::Error> for S3Error {
-    fn from(e: reqwest::Error) -> S3Error {
-        S3Error {
-            description: Some(format!("{}", e)),
-            data: None,
-            source: None,
-        }
-    }
-}
-
-impl std::convert::From<reqwest::header::InvalidHeaderName> for S3Error {
-    fn from(e: reqwest::header::InvalidHeaderName) -> S3Error {
-        S3Error {
-            description: Some(format!("{}", e)),
-            data: None,
-            source: None,
-        }
-    }
-}
-
-impl std::convert::From<reqwest::header::InvalidHeaderValue> for S3Error {
-    fn from(e: reqwest::header::InvalidHeaderValue) -> S3Error {
-        S3Error {
-            description: Some(format!("{}", e)),
-            data: None,
-            source: None,
-        }
-    }
-}
+use tokio_stream::StreamExt;
 
 // Temporary structure for making a request
 pub struct Reqwest<'a> {
     pub bucket: &'a Bucket,
     pub path: &'a str,
     pub command: Command<'a>,
-    pub datetime: DateTime<Utc>,
+    pub datetime: OffsetDateTime,
     pub sync: bool,
 }
 
-#[maybe_async(?Send)]
+#[maybe_async]
 impl<'a> Request for Reqwest<'a> {
     type Response = reqwest::Response;
     type HeaderMap = reqwest::header::HeaderMap;
@@ -74,7 +42,7 @@ impl<'a> Request for Reqwest<'a> {
         self.path.to_string()
     }
 
-    fn datetime(&self) -> DateTime<Utc> {
+    fn datetime(&self) -> OffsetDateTime {
         self.datetime
     }
 
@@ -82,20 +50,23 @@ impl<'a> Request for Reqwest<'a> {
         self.bucket.clone()
     }
 
-    async fn response(&self) -> Result<Response> {
+    async fn response(&self) -> Result<Response, S3Error> {
         // Build headers
         let headers = match self.headers() {
             Ok(headers) => headers,
             Err(e) => return Err(e),
         };
 
-        let client = if cfg!(feature = "no-verify-ssl") {
-            let client = Client::builder().timeout(self.bucket.timeout);
+        let mut client_builder = Client::builder();
+        if let Some(timeout) = self.bucket.request_timeout {
+            client_builder = client_builder.timeout(timeout)
+        }
 
+        if cfg!(feature = "no-verify-ssl") {
             cfg_if::cfg_if! {
                 if #[cfg(feature = "tokio-native-tls")]
                 {
-                    let client = client.danger_accept_invalid_hostnames(true);
+                    client_builder = client_builder.danger_accept_invalid_hostnames(true);
                 }
 
             }
@@ -103,15 +74,13 @@ impl<'a> Request for Reqwest<'a> {
             cfg_if::cfg_if! {
                 if #[cfg(any(feature = "tokio-native-tls", feature = "tokio-rustls-tls"))]
                 {
-                    let client = client.danger_accept_invalid_certs(true);
+                    client_builder = client_builder.danger_accept_invalid_certs(true);
                 }
 
             }
+        }
 
-            client.build().expect("Could not build dangerous client!")
-        } else {
-            Client::builder().timeout(self.bucket.timeout).build().unwrap()
-        };
+        let client = client_builder.build().expect("Could not build client!");
 
         let method = match self.command.http_verb() {
             HttpMethod::Delete => reqwest::Method::DELETE,
@@ -121,38 +90,23 @@ impl<'a> Request for Reqwest<'a> {
             HttpMethod::Head => reqwest::Method::HEAD,
         };
 
-        let mut header_map = HeaderMap::new();
-
-        for (k, v) in headers.into_iter() {
-            header_map.insert(
-                HeaderName::from_bytes(k.as_bytes())?,
-                HeaderValue::from_bytes(v.as_bytes())?,
-            );
-        }
-
         let request = client
-            .request(method, self.url(false).as_str())
-            // TODO convert this
-            .headers(header_map)
+            .request(method, self.url().as_str())
+            .headers(headers)
             .body(self.request_body());
 
         let response = request.send().await?;
 
-        if cfg!(feature = "fail-on-err") && response.status().as_u16() >= 400 {
-            return Err(S3Error::from(
-                format!(
-                    "Request failed with code {}\n{}",
-                    response.status().as_u16(),
-                    response.text().await?
-                )
-                .as_str(),
-            ));
+        if cfg!(feature = "fail-on-err") && !response.status().is_success() {
+            let status = response.status().as_u16();
+            let text = response.text().await?;
+            return Err(S3Error::Http(status, text));
         }
 
         Ok(response)
     }
 
-    async fn response_data(&self, etag: bool) -> Result<(Vec<u8>, u16)> {
+    async fn response_data(&self, etag: bool) -> Result<(Vec<u8>, u16), S3Error> {
         let response = self.response().await?;
         let status_code = response.status().as_u16();
         let headers = response.headers().clone();
@@ -171,7 +125,7 @@ impl<'a> Request for Reqwest<'a> {
     async fn response_data_by_multi_ranges(
         &self,
         _etag: bool,
-    ) -> Result<(Vec<MultiRangeResp>, u16)> {
+    ) -> Result<(Vec<MultiRangeResp>, u16), S3Error> {
         let response = self.response().await?;
         let status_code = response.status().as_u16();
         let headers = response.headers().clone();
@@ -183,12 +137,10 @@ impl<'a> Request for Reqwest<'a> {
 
         if boundary.is_none() {
             return Err(S3Error::from(
-                format!(
-                    "Request failed with code {}\n{:?}",
-                    status_code,
-                    headers,
+                std::str::from_utf8(
+                    format!("Request failed with code {}\n{:?}", status_code, headers,).as_bytes(),
                 )
-                .as_str(),
+                .unwrap_err(),
             ));
         }
 
@@ -218,10 +170,7 @@ impl<'a> Request for Reqwest<'a> {
                 off += x;
             }
             if off as u64 != length {
-                warn!(
-                    "data length not equal {} {} {}",
-                    range_str, start, length
-                );
+                warn!("data length not equal {} {} {}", range_str, start, length);
                 return;
             }
             ranges_resp.push(MultiRangeResp {
@@ -236,20 +185,24 @@ impl<'a> Request for Reqwest<'a> {
         Ok((ranges_resp, status_code))
     }
 
-    async fn response_data_to_writer<'b, T: Write>(&self, writer: &'b mut T) -> Result<u16> {
+    async fn response_data_to_writer<T: tokio::io::AsyncWrite + Send + Unpin>(
+        &self,
+        writer: &mut T,
+    ) -> Result<u16, S3Error> {
+        use tokio::io::AsyncWriteExt;
         let response = self.response().await?;
 
         let status_code = response.status();
         let mut stream = response.bytes_stream();
 
         while let Some(item) = stream.next().await {
-            writer.write_all(&item?)?;
+            writer.write_all(&item?).await?;
         }
 
         Ok(status_code.as_u16())
     }
 
-    async fn response_header(&self) -> Result<(Self::HeaderMap, u16)> {
+    async fn response_header(&self) -> Result<(Self::HeaderMap, u16), S3Error> {
         let response = self.response().await?;
         let status_code = response.status().as_u16();
         let headers = response.headers().clone();
@@ -263,7 +216,7 @@ impl<'a> Reqwest<'a> {
             bucket,
             path,
             command,
-            datetime: Utc::now(),
+            datetime: OffsetDateTime::now_utc(),
             sync: false,
         }
     }
@@ -275,8 +228,8 @@ mod tests {
     use crate::command::Command;
     use crate::request::Reqwest;
     use crate::request_trait::Request;
-    use crate::Result;
     use awscreds::Credentials;
+    use http::header::{HOST, RANGE};
 
     // Fake keys - otherwise using Credentials::default will use actual user
     // credentials if they exist.
@@ -287,72 +240,73 @@ mod tests {
     }
 
     #[test]
-    fn url_uses_https_by_default() -> Result<()> {
-        let region = "custom-region".parse()?;
-        let bucket = Bucket::new("my-first-bucket", region, std::time::Duration::from_secs(5),fake_credentials())?;
+    fn url_uses_https_by_default() {
+        let region = "custom-region".parse().unwrap();
+        let bucket = Bucket::new("my-first-bucket", region, fake_credentials()).unwrap();
         let path = "/my-first/path";
         let request = Reqwest::new(&bucket, path, Command::GetObject);
 
-        assert_eq!(request.url(false).scheme(), "https");
+        assert_eq!(request.url().scheme(), "https");
 
         let headers = request.headers().unwrap();
-        let host = headers.get("Host").unwrap();
+        let host = headers.get(HOST).unwrap();
 
         assert_eq!(*host, "my-first-bucket.custom-region".to_string());
-        Ok(())
     }
 
     #[test]
-    fn url_uses_https_by_default_path_style() -> Result<()> {
-        let region = "custom-region".parse()?;
-        let bucket = Bucket::new_with_path_style("my-first-bucket", region, std::time::Duration::from_secs(5),fake_credentials())?;
+    fn url_uses_https_by_default_path_style() {
+        let region = "custom-region".parse().unwrap();
+        let bucket = Bucket::new("my-first-bucket", region, fake_credentials())
+            .unwrap()
+            .with_path_style();
         let path = "/my-first/path";
         let request = Reqwest::new(&bucket, path, Command::GetObject);
 
-        assert_eq!(request.url(false).scheme(), "https");
+        assert_eq!(request.url().scheme(), "https");
 
         let headers = request.headers().unwrap();
-        let host = headers.get("Host").unwrap();
+        let host = headers.get(HOST).unwrap();
 
         assert_eq!(*host, "custom-region".to_string());
-        Ok(())
     }
 
     #[test]
-    fn url_uses_scheme_from_custom_region_if_defined() -> Result<()> {
-        let region = "http://custom-region".parse()?;
-        let bucket = Bucket::new("my-second-bucket", region, std::time::Duration::from_secs(5),fake_credentials())?;
+    fn url_uses_scheme_from_custom_region_if_defined() {
+        let region = "http://custom-region".parse().unwrap();
+        let bucket = Bucket::new("my-second-bucket", region, fake_credentials()).unwrap();
         let path = "/my-second/path";
         let request = Reqwest::new(&bucket, path, Command::GetObject);
 
-        assert_eq!(request.url(false).scheme(), "http");
+        assert_eq!(request.url().scheme(), "http");
 
         let headers = request.headers().unwrap();
-        let host = headers.get("Host").unwrap();
+        let host = headers.get(HOST).unwrap();
         assert_eq!(*host, "my-second-bucket.custom-region".to_string());
-        Ok(())
     }
 
     #[test]
-    fn url_uses_scheme_from_custom_region_if_defined_with_path_style() -> Result<()> {
-        let region = "http://custom-region".parse()?;
-        let bucket = Bucket::new_with_path_style("my-second-bucket", region, std::time::Duration::from_secs(5),fake_credentials())?;
+    fn url_uses_scheme_from_custom_region_if_defined_with_path_style() {
+        let region = "http://custom-region".parse().unwrap();
+        let bucket = Bucket::new("my-second-bucket", region, fake_credentials())
+            .unwrap()
+            .with_path_style();
         let path = "/my-second/path";
         let request = Reqwest::new(&bucket, path, Command::GetObject);
 
-        assert_eq!(request.url(false).scheme(), "http");
+        assert_eq!(request.url().scheme(), "http");
 
         let headers = request.headers().unwrap();
-        let host = headers.get("Host").unwrap();
+        let host = headers.get(HOST).unwrap();
         assert_eq!(*host, "custom-region".to_string());
-
-        Ok(())
     }
 
     #[test]
-    fn test_get_object_range_header() -> Result<()> {
-        let region = "http://custom-region".parse()?;
-        let bucket = Bucket::new_with_path_style("my-second-bucket", region, std::time::Duration::from_secs(5),fake_credentials())?;
+    fn test_get_object_range_header() {
+        let region = "http://custom-region".parse().unwrap();
+        let bucket = Bucket::new("my-second-bucket", region, fake_credentials())
+            .unwrap()
+            .with_path_style();
         let path = "/my-second/path";
 
         let request = Reqwest::new(
@@ -364,7 +318,7 @@ mod tests {
             },
         );
         let headers = request.headers().unwrap();
-        let range = headers.get("Range").unwrap();
+        let range = headers.get(RANGE).unwrap();
         assert_eq!(range, "bytes=0-");
 
         let request = Reqwest::new(
@@ -376,9 +330,7 @@ mod tests {
             },
         );
         let headers = request.headers().unwrap();
-        let range = headers.get("Range").unwrap();
+        let range = headers.get(RANGE).unwrap();
         assert_eq!(range, "bytes=0-1");
-
-        Ok(())
     }
 }

@@ -1,7 +1,7 @@
 #[derive(Deserialize, Debug)]
 pub struct InitiateMultipartUploadResponse {
     #[serde(rename = "Bucket")]
-    bucket: String,
+    _bucket: String,
     #[serde(rename = "Key")]
     pub key: String,
     #[serde(rename = "UploadId")]
@@ -13,7 +13,7 @@ pub struct InitiateMultipartUploadResponse {
 pub struct Owner {
     #[serde(rename = "DisplayName")]
     /// Object owner's name.
-    pub display_name: String,
+    pub display_name: Option<String>,
     #[serde(rename = "ID")]
     /// Object owner's ID.
     pub id: String,
@@ -28,10 +28,10 @@ pub struct Object {
     #[serde(rename = "ETag")]
     /// The entity tag is an MD5 hash of the object. The ETag only reflects changes to the
     /// contents of an object, not its metadata.
-    pub e_tag: String,
+    pub e_tag: Option<String>,
     #[serde(rename = "StorageClass")]
     /// STANDARD | STANDARD_IA | REDUCED_REDUNDANCY | GLACIER
-    pub storage_class: String,
+    pub storage_class: Option<String>,
     #[serde(rename = "Key")]
     /// The object's key
     pub key: String,
@@ -43,34 +43,24 @@ pub struct Object {
     pub size: u64,
 }
 
+/// An individual upload in a `ListMultipartUploadsResult`
 #[derive(Deserialize, Debug, Clone)]
-pub struct Tagging {
-    #[serde(rename = "TagSet")]
-    pub tag_set: Vec<Tag>,
-}
-
-#[derive(Deserialize, Debug, Clone)]
-pub struct Tag {
-    #[serde(rename = "Tag")]
-    pub kvpair: KVPair,
-}
-
-impl Tag {
-    pub fn key(&self) -> String {
-        self.kvpair.key.clone()
-    }
-
-    pub fn value(&self) -> String {
-        self.kvpair.value.clone()
-    }
-}
-
-#[derive(Deserialize, Debug, Clone)]
-pub struct KVPair {
+pub struct MultipartUpload {
+    #[serde(rename = "Initiated")]
+    /// Date and time the multipart upload was initiated
+    pub initiated: String,
+    #[serde(rename = "StorageClass")]
+    /// STANDARD | STANDARD_IA | REDUCED_REDUNDANCY | GLACIER
+    pub storage_class: String,
     #[serde(rename = "Key")]
+    /// The object's key
     pub key: String,
-    #[serde(rename = "Value")]
-    pub value: String,
+    #[serde(rename = "Owner")]
+    /// Bucket owner
+    pub owner: Option<Owner>,
+    #[serde(rename = "UploadId")]
+    /// The identifier of the upload
+    pub id: String,
 }
 
 use std::fmt;
@@ -119,29 +109,74 @@ pub struct BucketLocationResult {
 }
 
 /// The parsed result of a s3 bucket listing
+///
+/// This accepts the ListBucketResult format returned for both ListObjects and ListObjectsV2
 #[derive(Deserialize, Debug, Clone)]
 pub struct ListBucketResult {
     #[serde(rename = "Name")]
     /// Name of the bucket.
     pub name: String,
-    #[serde(rename = "NextMarker")]
-    /// When the response is truncated (that is, the IsTruncated element value in the response
-    /// is true), you can use the key name in this field as a marker in the subsequent request
-    /// to get next set of objects. Amazon S3 lists objects in UTF-8 character encoding in
-    /// lexicographical order.
-    pub next_marker: Option<String>,
     #[serde(rename = "Delimiter")]
     /// A delimiter is a character you use to group keys.
     pub delimiter: Option<String>,
     #[serde(rename = "MaxKeys")]
     /// Sets the maximum number of keys returned in the response body.
-    pub max_keys: i32,
+    pub max_keys: Option<i32>,
     #[serde(rename = "Prefix")]
     /// Limits the response to keys that begin with the specified prefix.
-    pub prefix: String,
-    #[serde(rename = "Marker")]
-    /// Indicates where in the bucket listing begins. Marker is included in the response if
+    pub prefix: Option<String>,
+    #[serde(rename = "ContinuationToken")] // for ListObjectsV2 request
+    #[serde(alias = "Marker")] // for ListObjects request
+    /// Indicates where in the bucket listing begins. It is included in the response if
     /// it was sent with the request.
+    pub continuation_token: Option<String>,
+    #[serde(rename = "EncodingType")]
+    /// Specifies the encoding method to used
+    pub encoding_type: Option<String>,
+    #[serde(
+        default,
+        rename = "IsTruncated",
+        deserialize_with = "super::deserializer::bool_deserializer"
+    )]
+    ///  Specifies whether (true) or not (false) all of the results were returned.
+    ///  If the number of results exceeds that specified by MaxKeys, all of the results
+    ///  might not be returned.
+
+    /// When the response is truncated (that is, the IsTruncated element value in the response
+    /// is true), you can use the key name in in 'next_continuation_token' as a marker in the
+    /// subsequent request to get next set of objects. Amazon S3 lists objects in UTF-8 character
+    /// encoding in lexicographical order.
+    pub is_truncated: bool,
+    #[serde(rename = "NextContinuationToken", default)] // for ListObjectsV2 request
+    #[serde(alias = "NextMarker")] // for ListObjects request
+    pub next_continuation_token: Option<String>,
+    #[serde(rename = "Contents", default)]
+    /// Metadata about each object returned.
+    pub contents: Vec<Object>,
+    #[serde(rename = "CommonPrefixes", default)]
+    /// All of the keys rolled up into a common prefix count as a single return when
+    /// calculating the number of returns.
+    pub common_prefixes: Option<Vec<CommonPrefix>>,
+}
+
+/// The parsed result of a s3 bucket listing of uploads
+#[derive(Deserialize, Debug, Clone)]
+pub struct ListMultipartUploadsResult {
+    #[serde(rename = "Bucket")]
+    /// Name of the bucket.
+    pub name: String,
+    #[serde(rename = "NextKeyMarker")]
+    /// When the response is truncated (that is, the IsTruncated element value in the response
+    /// is true), you can use the key name in this field as a marker in the subsequent request
+    /// to get next set of objects. Amazon S3 lists objects in UTF-8 character encoding in
+    /// lexicographical order.
+    pub next_marker: Option<String>,
+    #[serde(rename = "Prefix")]
+    /// The prefix, present if the request contained a prefix too, shows the search root for the
+    /// uploads listed in this structure.
+    pub prefix: Option<String>,
+    #[serde(rename = "KeyMarker")]
+    /// Indicates where in the bucket listing begins.
     pub marker: Option<String>,
     #[serde(rename = "EncodingType")]
     /// Specifies the encoding method to used
@@ -154,11 +189,9 @@ pub struct ListBucketResult {
     ///  If the number of results exceeds that specified by MaxKeys, all of the results
     ///  might not be returned.
     pub is_truncated: bool,
-    #[serde(rename = "NextContinuationToken", default)]
-    pub next_continuation_token: Option<String>,
-    #[serde(rename = "Contents", default)]
-    /// Metadata about each object returned.
-    pub contents: Vec<Object>,
+    #[serde(rename = "Upload", default)]
+    /// Metadata about each upload returned.
+    pub uploads: Vec<MultipartUpload>,
     #[serde(rename = "CommonPrefixes", default)]
     /// All of the keys rolled up into a common prefix count as a single return when
     /// calculating the number of returns.

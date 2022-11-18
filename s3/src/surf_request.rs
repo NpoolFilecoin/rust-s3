@@ -1,53 +1,34 @@
-use async_std::io::ReadExt;
-use std::collections::HashMap;
-use std::io::Write;
+use async_std::io::{ReadExt, WriteExt};
+use futures_io::AsyncWrite;
 
 use super::bucket::Bucket;
 use super::command::Command;
-use chrono::{DateTime, Utc};
+use crate::error::S3Error;
+use time::OffsetDateTime;
 
 use crate::command::HttpMethod;
 use crate::request_trait::Request;
-use crate::{Result, S3Error};
+
+use http::HeaderMap;
 use maybe_async::maybe_async;
 use surf::http::headers::{HeaderName, HeaderValue};
 use surf::http::Method;
-
-impl std::convert::From<surf::Error> for S3Error {
-    fn from(e: surf::Error) -> S3Error {
-        S3Error {
-            description: Some(format!("{}", e)),
-            data: None,
-            source: None,
-        }
-    }
-}
-
-impl std::convert::From<http::header::InvalidHeaderValue> for S3Error {
-    fn from(e: http::header::InvalidHeaderValue) -> S3Error {
-        S3Error {
-            description: Some(format!("{}", e)),
-            data: None,
-            source: None,
-        }
-    }
-}
 
 // Temporary structure for making a request
 pub struct SurfRequest<'a> {
     pub bucket: &'a Bucket,
     pub path: &'a str,
     pub command: Command<'a>,
-    pub datetime: DateTime<Utc>,
+    pub datetime: OffsetDateTime,
     pub sync: bool,
 }
 
-#[maybe_async(?Send)]
+#[maybe_async]
 impl<'a> Request for SurfRequest<'a> {
     type Response = surf::Response;
-    type HeaderMap = HashMap<String, String>;
+    type HeaderMap = HeaderMap;
 
-    fn datetime(&self) -> DateTime<Utc> {
+    fn datetime(&self) -> OffsetDateTime {
         self.datetime
     }
 
@@ -63,45 +44,46 @@ impl<'a> Request for SurfRequest<'a> {
         self.path.to_string()
     }
 
-    async fn response(&self) -> Result<surf::Response> {
+    async fn response(&self) -> Result<surf::Response, S3Error> {
         // Build headers
-        let headers = match self.headers() {
-            Ok(headers) => headers,
-            Err(e) => return Err(e),
-        };
+        let headers = self.headers()?;
 
         let request = match self.command.http_verb() {
-            HttpMethod::Get => surf::Request::builder(Method::Get, self.url(false)),
-            HttpMethod::Delete => surf::Request::builder(Method::Delete, self.url(false)),
-            HttpMethod::Put => surf::Request::builder(Method::Put, self.url(false)),
-            HttpMethod::Post => surf::Request::builder(Method::Post, self.url(false)),
-            HttpMethod::Head => surf::Request::builder(Method::Head, self.url(false)),
+            HttpMethod::Get => surf::Request::builder(Method::Get, self.url()),
+            HttpMethod::Delete => surf::Request::builder(Method::Delete, self.url()),
+            HttpMethod::Put => surf::Request::builder(Method::Put, self.url()),
+            HttpMethod::Post => surf::Request::builder(Method::Post, self.url()),
+            HttpMethod::Head => surf::Request::builder(Method::Head, self.url()),
         };
 
         let mut request = request.body(self.request_body());
 
-        for (name, value) in headers {
+        for (name, value) in headers.iter() {
             request = request.header(
-                HeaderName::from_bytes(name.as_bytes().to_vec())?,
-                HeaderValue::from_bytes(value.as_bytes().to_vec())?,
+                HeaderName::from_bytes(AsRef::<[u8]>::as_ref(&name).to_vec()).unwrap(),
+                HeaderValue::from_bytes(AsRef::<[u8]>::as_ref(&value).to_vec()).unwrap(),
             );
         }
 
-        let response = request.send().await?;
+        let response = request
+            .send()
+            .await
+            .map_err(|e| S3Error::Surf(e.to_string()))?;
 
         if cfg!(feature = "fail-on-err") && !response.status().is_success() {
-            return Err(S3Error::from(
-                format!("Request failed with code {}", response.status()).as_str(),
-            ));
+            return Err(S3Error::HttpFail);
         }
 
         Ok(response)
     }
 
-    async fn response_data(&self, etag: bool) -> Result<(Vec<u8>, u16)> {
+    async fn response_data(&self, etag: bool) -> Result<(Vec<u8>, u16), S3Error> {
         let mut response = self.response().await?;
         let status_code = response.status();
-        let body = response.body_bytes().await?;
+        let body = response
+            .body_bytes()
+            .await
+            .map_err(|e| S3Error::Surf(e.to_string()))?;
         let mut body_vec = Vec::new();
         body_vec.extend_from_slice(&body[..]);
         if etag {
@@ -112,7 +94,10 @@ impl<'a> Request for SurfRequest<'a> {
         Ok((body_vec, status_code.into()))
     }
 
-    async fn response_data_to_writer<'b, T: Write>(&self, writer: &'b mut T) -> Result<u16> {
+    async fn response_data_to_writer<T: AsyncWrite + Send + Unpin>(
+        &self,
+        writer: &mut T,
+    ) -> Result<u16, S3Error> {
         let mut buffer = Vec::new();
 
         let response = self.response().await?;
@@ -123,19 +108,22 @@ impl<'a> Request for SurfRequest<'a> {
 
         stream.read_to_end(&mut buffer).await?;
 
-        writer.write_all(&buffer)?;
+        writer.write_all(&buffer).await?;
 
         Ok(status_code.into())
     }
 
-    async fn response_header(&self) -> Result<(HashMap<String, String>, u16)> {
-        let mut header_map = HashMap::new();
+    async fn response_header(&self) -> Result<(HeaderMap, u16), S3Error> {
+        let mut header_map = HeaderMap::new();
         let response = self.response().await?;
         let status_code = response.status();
+
         for (name, value) in response.iter() {
             header_map.insert(
-                name.to_string().to_ascii_lowercase(),
-                value.as_str().to_string(),
+                http::header::HeaderName::from_lowercase(
+                    name.to_string().to_ascii_lowercase().as_ref(),
+                )?,
+                value.as_str().parse()?,
             );
         }
         Ok((header_map, status_code.into()))
@@ -148,7 +136,7 @@ impl<'a> SurfRequest<'a> {
             bucket,
             path,
             command,
-            datetime: Utc::now(),
+            datetime: OffsetDateTime::now_utc(),
             sync: false,
         }
     }
@@ -160,7 +148,7 @@ mod tests {
     use crate::command::Command;
     use crate::request_trait::Request;
     use crate::surf_request::SurfRequest;
-    use crate::Result;
+    use anyhow::Result;
     use awscreds::Credentials;
 
     // Fake keys - otherwise using Credentials::default will use actual user
@@ -178,7 +166,7 @@ mod tests {
         let path = "/my-first/path";
         let request = SurfRequest::new(&bucket, path, Command::GetObject);
 
-        assert_eq!(request.url(false).scheme(), "https");
+        assert_eq!(request.url().scheme(), "https");
 
         let headers = request.headers().unwrap();
         let host = headers.get("Host").unwrap();
@@ -194,7 +182,7 @@ mod tests {
         let path = "/my-first/path";
         let request = SurfRequest::new(&bucket, path, Command::GetObject);
 
-        assert_eq!(request.url(false).scheme(), "https");
+        assert_eq!(request.url().scheme(), "https");
 
         let headers = request.headers().unwrap();
         let host = headers.get("Host").unwrap();
@@ -210,7 +198,7 @@ mod tests {
         let path = "/my-second/path";
         let request = SurfRequest::new(&bucket, path, Command::GetObject);
 
-        assert_eq!(request.url(false).scheme(), "http");
+        assert_eq!(request.url().scheme(), "http");
 
         let headers = request.headers().unwrap();
         let host = headers.get("Host").unwrap();
@@ -225,7 +213,7 @@ mod tests {
         let path = "/my-second/path";
         let request = SurfRequest::new(&bucket, path, Command::GetObject);
 
-        assert_eq!(request.url(false).scheme(), "http");
+        assert_eq!(request.url().scheme(), "http");
 
         let headers = request.headers().unwrap();
         let host = headers.get("Host").unwrap();

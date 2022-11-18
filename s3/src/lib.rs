@@ -7,12 +7,11 @@ extern crate serde_derive;
 #[macro_use]
 extern crate quick_error;
 
-use serde_xml_rs as serde_xml;
-
 pub use awscreds as creds;
 pub use awsregion as region;
 
 pub use bucket::Bucket;
+pub use bucket::Tag;
 pub use bucket_ops::BucketConfiguration;
 pub use region::Region;
 
@@ -29,21 +28,12 @@ pub mod signing;
 #[cfg(feature = "with-async-std")]
 pub mod surf_request;
 
+pub mod error;
 pub mod request_trait;
 pub mod utils;
 
 mod multipart;
 
-simpl::err!(S3Error, {
-    Xml@serde_xml::Error;
-    HttpHeader@http::header::ToStrError;
-    Hmac@hmac::crypto_mac::InvalidKeyLength;
-    Utf8@std::str::Utf8Error;
-    Io@std::io::Error;
-    Region@awsregion::AwsRegionError;
-    Creds@awscreds::AwsCredsError;
-    UrlParse@url::ParseError;
-});
-
-const LONG_DATE: &str = "%Y%m%dT%H%M%SZ";
+const LONG_DATETIME: &[time::format_description::FormatItem<'static>] =
+    time::macros::format_description!("[year][month][day]T[hour][minute][second]Z");
 const EMPTY_PAYLOAD_SHA: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
