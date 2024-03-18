@@ -115,7 +115,7 @@ pub trait Request {
         }
         let canonical_request = self.presigned_canonical_request(&headers)?;
         let string_to_sign = self.string_to_sign(&canonical_request);
-        let mut hmac = signing::HmacSha256::new_varkey(&self.signing_key()?)?;
+        let mut hmac = signing::HmacSha256::new_from_slice(&self.signing_key()?)?;
         hmac.update(string_to_sign.as_bytes());
         let signature = hex::encode(hmac.finalize().into_bytes());
         // let signed_header = signing::signed_header_string(&headers);
@@ -249,7 +249,7 @@ pub trait Request {
     fn authorization(&self, headers: &Headers) -> Result<String> {
         let canonical_request = self.canonical_request(headers);
         let string_to_sign = self.string_to_sign(&canonical_request);
-        let mut hmac = signing::HmacSha256::new_varkey(&self.signing_key()?)?;
+        let mut hmac = signing::HmacSha256::new_from_slice(&self.signing_key()?)?;
         hmac.update(string_to_sign.as_bytes());
         let signature = hex::encode(hmac.finalize().into_bytes());
         let signed_header = signing::signed_header_string(headers);
